@@ -1,0 +1,157 @@
+# Model the Education of an employee
+#---Coded by YaxianLi
+# Note: the number of days is counted from today(March/22/2014) to March/22/2019
+
+#n: Total number of days I will spend for reading in 5 years+200;
+#t: Total number of minites I will spend for reading in 5 years+200*15;
+#Pd: the probabilitis of the number of facts get in Day 1,Day2...Dayn.
+#p_vector[t+1,1]: Possible probabilities that I get a fact during one minites;
+#i_vector[15+1,1]: Index vector that indicate the possible contributions of p_j to get the number of facts per day;
+#m_vector[15+1,1]: the number of facts I can get per day;
+#PP: number of Possible positions for each fact to be learned per day;
+#RanPd: Random sampling probability results for each day;
+#Ps: Probability distribution of Salary;
+#Facts.Probfunc: a function about the distribution of the number of facts gained per day;
+install.packages("combinat")
+require(combinat)
+require(graphics)
+require(stats)
+
+n=2027
+t=2027*15
+
+p=matrix(0,nrow=t+1,ncol=1)
+for (i in 1:(t+1)){
+  p[i,1]=(log10(500+i-1))/6
+}
+
+i=matrix(0:15,nrow=16,ncol=1)
+Pd=matrix(0,nrow=16,ncol=n)
+RanPd=matrix(0,nrow=1,ncol=n)
+
+#Probabilities of the number of facts get in Day 1.
+#i: Total facts that can be learned per day;
+#PP: number of Possible positions(minites) for each fact to be learned per day;
+
+#Facts.Probfunction begins
+ProbFunc=function(I,X,p){
+  Q=matrix(0,nrow=16,ncol=1)
+  m=sum(X)
+  Q[1]=p[1]*(1-p[1])^(I[1]-1)
+  for(j in 2:(m+1)){  
+    if(X[j]==0){
+      k=j
+      Q[j]=((1-p[j])^(15-I[j-1]))*Q[j-1]
+      break
+    }else {
+      Q[j]=p[j]*((1-p[j])^(I[j]-I[j-1]-1))*Q[j-1] 
+    }
+  }
+  return(Q[k])
+}
+
+
+Combin.x=c(1:15)
+
+Facts.Probfunc=function(p0){
+  Pd0=matrix(0,nrow=16,ncol=1)
+  Pd0[1]=(1-p0[1])^(15)
+  for(i in 2:16){
+    Ind=as.matrix(combn(Combin.x,i-1))
+    col=ncol(Ind)
+    t.row=nrow(Ind)
+    X=matrix(c(rep(1,i-1),rep(0,16-i+1)),nrow=1)
+    for (j in 1:col){
+      Ind.sub=Ind[,j]
+      I=t(Ind.sub)
+      Pd0[i]=ProbFunc(I,X,p0)+Pd0[i]
+    }
+  }
+  return(Pd0)
+}
+
+#build the distribution function for the Salary gained per day
+
+Salary.distri=function(p1,nn,Sal){
+  Prob.Raise=matrix(0,nrow=14001,ncol=1)
+  Salary.Sampling=matrix(0,nrow=14001,ncol=1)
+  Indx=as.matrix(c((-4000:10000)/100))
+  Small.Interval=0.01
+  Salary.Sampling=Indx+Sal
+  Prob.Raise=p1*dnorm(Indx,nn/5,10)*0.01
+  Prob.Raise[4001]=(1-p1)+Prob.Raise[4001]
+  Prob.Raise[14001]=p1*pnorm(100,nn/5,10,lower.tail=FALSE)
+  return(cbind(Salary.Sampling,Prob.Raise))
+}
+
+
+#Simulation iterations using k as my index 
+Salary.Re=matrix(0,nrow=n,ncol=2)
+
+# For Binomial Cases change RanPd into :
+#RanPd=matrix(0.1*p[1],nrow=1,ncol=n)
+Pd[,1]=Facts.Probfunc(p)
+
+#Random sampling according to the distribution of number of facts learned in day1.
+set.seed(124)
+SaNew1=sample(0:15, 1, prob = Pd[,1], replace = T) #begins from 1 instead of time 0
+Sa=SaNew+1
+RanPd[1]=0.1*p[Sa]
+Newp=as.matrix(p[Sa:(Sa+16)])
+
+for(l in 2:n){  
+  #Random sampling according to the distribution of number of facts learned in dayl.
+  Pd[,l]=Facts.Probfunc(Newp)
+  set.seed(124)
+  SaNew=sample(0:15, 1, prob = Pd[,l], replace = T)
+  Sa=Sa+SaNew
+  RanPd[l]=0.1*p[Sa]
+  Newp=p[Sa:(Sa+16)]
+}
+
+
+for(k in 1:200){
+  
+  
+  #Sampling Salary for each day
+  p1=Salary.distri(RanPd[1],1,50000)
+  Salary.Re[1,k]=sample(p1[,1],1,prob=p1[,2],replace = T)
+  
+  
+  for(l in 2:n){  
+    #Sampling Salary for each day
+    p1=Salary.distri(RanPd[l],l,Salary.Re[l-1,k])
+    Salary.Re[l,k]=sample(p1[,1],1,prob=p1[,2],replace = T)
+  }
+}
+ 
+#Consider the day after 5 years only
+hist(Salary.Re[1828,],prob=TRUE,main='Histogram of Salary With Its kernel Density& normal curve',density=20)
+lines(density(Salary.Re[1828,]), col = "darkred")
+m<-mean(Salary.Re[1828,])
+std<-sqrt(var(Salary.Re[1828,]))
+curve(dnorm(x, mean=m, sd=std),  col="darkblue", lwd=2, add=TRUE)
+
+#normality test
+qqnorm(Salary.Re[1828,])
+qqline(Salary.Re[1828,])
+
+
+E.cdf=ecdf(Salary.Re[1828,])
+plot(E.cdf,main="Empirical Distritbution of Salary")
+
+#see 10 days
+E.cdf=ecdf(Salary.Re[1828,])
+plot(E.cdf,main="Empirical Distritbution of Salary for the next 10 Days")
+E.cdf=ecdf(Salary.Re[1829,])
+lines(E.cdf,col="green")
+E.cdf=ecdf(Salary.Re[1830,])
+lines(E.cdf,col="red")
+E.cdf=ecdf(Salary.Re[1831,])
+lines(E.cdf,col="blue")
+E.cdf=ecdf(Salary.Re[1832,])
+lines(E.cdf,col="gold")
+E.cdf=ecdf(Salary.Re[1833,])
+lines(E.cdf,col="yellow")
+E.cdf=ecdf(Salary.Re[1838,])
+lines(E.cdf,col="black")
